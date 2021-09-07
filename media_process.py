@@ -16,10 +16,10 @@ def get_timestamp(f) -> Tuple[str, str]:
     if ".jpg" == extension.lower():
         img = Image.open(f)
         exif = {ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS}
-        value: str = exif['DateTime']
+        value: str = exif['DateTimeOriginal']
         dt, tm = [v.split(':') for v in value.split(' ')]
         return f'{dt[0]}/{dt[1]}', f'{"".join(dt + tm)}'
-    elif extension.lower() in (".mp4", ".mp3"):
+    elif extension.lower() in (".mp4", ".mp3", ".mov", ".mkv"):
         ctime = time.localtime(os.path.getmtime(f))
         return time.strftime(PATH_FMT, ctime), time.strftime(PREFIX_FMT, ctime)
     else:
