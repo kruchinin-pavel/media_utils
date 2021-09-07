@@ -10,6 +10,6 @@ class Test(TestCase):
         self.assertEqual('2014/08', path_name)
 
     def test_process_file2(self):
-        path_name, file_name = get_timestamp('samples/Фото0007.jpg')
+        path_name, file_name = get_timestamp('/media/krucpav/DATA/backup/photo_bkp/полина.jpeg')
         self.assertEqual('20130106144641', file_name)
         self.assertEqual('2013/01', path_name)

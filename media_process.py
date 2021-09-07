@@ -13,17 +13,18 @@ PATH_FMT = '%Y/%m'
 def get_timestamp(f) -> Tuple[str, str]:
     from PIL import Image, ExifTags
     file_name, extension = splitext(f)
-    if ".jpg" == extension.lower():
+    if extension.lower() in (".jpg", ".jpeg"):
         img = Image.open(f)
-        exif = {ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS}
-        value: str = exif['DateTimeOriginal']
-        dt, tm = [v.split(':') for v in value.split(' ')]
-        return f'{dt[0]}/{dt[1]}', f'{"".join(dt + tm)}'
+        exif_obj = img._getexif()
+        if exif_obj is not None:
+            exif = {ExifTags.TAGS[k]: v for k, v in exif_obj.items() if k in ExifTags.TAGS}
+            value: str = exif['DateTimeOriginal']
+            dt, tm = [v.split(':') for v in value.split(' ')]
+            return f'{dt[0]}/{dt[1]}', f'{"".join(dt + tm)}'
     elif extension.lower() in (".mp4", ".mp3", ".mov", ".mkv"):
         ctime = time.localtime(os.path.getmtime(f))
         return time.strftime(PATH_FMT, ctime), time.strftime(PREFIX_FMT, ctime)
-    else:
-        return None, None
+    return None, None
 
 
 def process_file(f):
