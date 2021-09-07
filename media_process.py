@@ -62,6 +62,8 @@ def process_file(f, root=None) -> List[Tuple[str, str]]:
         except ValueError as ve:
             print("File %s not processed" % f)
             nn = os.path.join(root, 'skipped', basename)
+        if f == nn:
+            return []
         return [[f, nn]]
     else:
         lst = []
