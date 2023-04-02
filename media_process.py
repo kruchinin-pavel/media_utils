@@ -25,7 +25,7 @@ def get_timestamp(f) -> Tuple[str, str]:
                 if value is None:
                     raise ValueError(f'in {f} neither DateTimeOriginal nor DateTime found. Has only: {exif.keys()}')
             dt, tm = [v.split(':') for v in value.split(' ')]
-            return f'{dt[0]}/{dt[1]}', f'{"".join(dt + tm)}'
+            return f'{dt[0]}{os.sep}{dt[1]}', f'{"".join(dt + tm)}'
     elif extension.lower() in (".mp4", ".mp3", ".mov", ".mkv"):
         ctime = time.localtime(os.path.getmtime(f))
         return time.strftime(PATH_FMT, ctime), time.strftime(PREFIX_FMT, ctime)
@@ -55,15 +55,15 @@ def process_file(f, root=None) -> List[Tuple[str, str]]:
             subpath, timestamp = get_timestamp(f)
             prefix = "%s_" % timestamp
             if basename[0:len(prefix)] == prefix:
-                print("File %s was already renamed, just moving" % (f))
                 nn = os.path.join(root, subpath, basename)
+                if f == nn:
+                    return []
+                print("File %s was already renamed, just moving" % (f))
             else:
                 nn = os.path.join(root, subpath, "%s%s" % (prefix, basename))
         except ValueError as ve:
             print("File %s not processed" % f)
             nn = os.path.join(root, 'skipped', basename)
-        if f == nn:
-            return []
         return [[f, nn]]
     else:
         lst = []
@@ -81,6 +81,10 @@ def main(paths):
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
+        for dir_to_look in sys.argv[1:]:
+            if not os.path.isdir(dir_to_look):
+                raise AttributeError(f'Not a directory: {dir_to_look}')
+        print(f'Looking at {sys.argv[1:]}')
         main(sys.argv[1:])
     else:
         print("Usage: %s <JPG files with Exif tags>" % (sys.argv[0]))
