@@ -135,7 +135,7 @@ if __name__ == '__main__':
         if not os.path.isdir(dir_to_look):
             raise AttributeError(f'Not a directory: {dir_to_look}')
         print(f'Looking at {dir_to_look}')
-        total_saved, total_checked = dup(dir_to_look.replace('/', '\\'))
+        total_saved, total_checked = dup(dir_to_look)
         print(f'Done. Totally saved  {total_saved / 1024 / 1024.}mb, {total_checked} files')
     except Exception as ex:
         traceback.print_exc()
