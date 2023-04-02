@@ -1,6 +1,8 @@
 import gc
 import multiprocessing
 import os
+import sys
+import traceback
 from time import sleep
 from typing import List, Iterable
 
@@ -79,13 +81,10 @@ def run_parallel3(func, tasks: List, by_one=True, workers=multiprocessing.cpu_co
                 yield r
 
 
-# global total_saved
-# total_saved = 0
-
-
-def process_dir(r, files):
-    total_saved = 0
-    print(f'Scanning {r}')
+def process_dir(r, files) -> [str, int, int]:
+    total_saved: int = 0
+    total_checked: int = len(files)
+    # print(f'Scanning {r}')
     for name in [_f for _f in files if "~" == _f[-1]]:
         fname_dup = os.path.join(r, name)
         fname_org = os.path.join(r, name[:-1])
@@ -94,42 +93,49 @@ def process_dir(r, files):
             sz_dup = os.stat(fname_dup).st_size
             if sz_orig > 0 and sz_orig == sz_dup:
                 total_saved += sz_orig
-                print(f'{fname_dup}: {sz_orig / 1024 / 1024.}. Total saved {total_saved / 1024 / 1024.}mb'.replace('/',
-                                                                                                                   '\\'))
+                print(f'{fname_dup}: {sz_orig / 1024 / 1024.}mb'.replace('/', '\\'))
                 os.remove(fname_dup)
             else:
                 print(f'Dup with dif size {fname_dup}: {sz_dup}!={sz_orig}'.replace('/', '\\'))
         else:
             print(f'recover {fname_dup} to {fname_org}'.replace('/', '\\'))
             os.rename(fname_dup, fname_org)
-    return r
+    return r, total_saved, total_checked
 
 
-def dup(str):
+def dup(str) -> [int, int]:
     # dups = [s for s in files if '~' == s[-1]]
     # for l in os.walk(str, topdown=False):
+    total_saved = 0
+    total_checked = 0
     batch = 10
     params = []
     running = []
     for r, d, f in os.walk(str):
         params.append([r, f])
-        print(f'read {len(params)} paths')
         if len(params) >= batch:
-            for r in running:
-                print(f'Done  {r}')
+            for r, total_saved_, total_checked_ in running:
+                total_saved += total_saved_
+                total_checked += total_checked_
+                print(f'Done  {r}: {total_saved / 1024 / 1024.}mb, {total_checked} files')
             running = run_parallel3(process_dir, params, workers=batch)
             params = []
-
     if len(params) > 0:
-        print(f'read {len(params)} paths')
-        for r in run_parallel3(process_dir, params, workers=batch):
-            print(f'Done final  {r}')
+        for r, total_saved_, total_checked_ in run_parallel3(process_dir, params, workers=batch):
+            total_saved += total_saved_
+            total_checked += total_checked_
+            print(f'Done  {r}: {total_saved / 1024 / 1024.}mb, {total_checked} files')
+    return total_saved, total_checked
 
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
     try:
-        # dup('//192.168.2.1/black_hdd/photo_bkp/'.replace('/', '\\'))
-        dup('//192.168.2.1/photo_bkp/'.replace('/', '\\'))
+        dir_to_look = sys.argv[1]
+        if not os.path.isdir(dir_to_look):
+            raise AttributeError(f'Not a directory: {dir_to_look}')
+        print(f'Looking at {dir_to_look}')
+        total_saved, total_checked = dup(dir_to_look.replace('/', '\\'))
+        print(f'Done. Totally saved  {total_saved / 1024 / 1024.}mb, {total_checked} files')
     except Exception as ex:
-        print(f'Error: {ex}')
+        traceback.print_exc()
