@@ -1,17 +1,23 @@
 #!/usr/bin/python3.6
+from win32com.propsys import propsys, pscon
+import datetime
+from datetime import datetime
 import filecmp
 import os
 import shutil
 import sys
 import time
 from os.path import splitext
+from pathlib import Path
 from typing import Tuple, List
+
+import dateparser
 
 PREFIX_FMT = '%Y%m%d%H%M%S'
 PATH_FMT = '%Y/%m'
 
 
-def get_timestamp(f) -> Tuple[str, str]:
+def get_timestamp(f) -> Tuple[str, str, bool]:
     from PIL import Image, ExifTags
     file_name, extension = splitext(f)
     if extension.lower() in (".jpg", ".jpeg"):
@@ -25,10 +31,22 @@ def get_timestamp(f) -> Tuple[str, str]:
                 if value is None:
                     raise ValueError(f'in {f} neither DateTimeOriginal nor DateTime found. Has only: {exif.keys()}')
             dt, tm = [v.split(':') for v in value.split(' ')]
-            return f'{dt[0]}{os.sep}{dt[1]}', f'{"".join(dt + tm)}'
+            return f'{dt[0]}{os.sep}{dt[1]}', f'{"".join(dt + tm)}', True
     elif extension.lower() in (".mp4", ".mp3", ".mov", ".mkv"):
-        ctime = time.localtime(os.path.getmtime(f))
-        return time.strftime(PATH_FMT, ctime), time.strftime(PREFIX_FMT, ctime)
+        fn = Path(file_name).name
+        fn = "".join(filter(str.isdigit, fn))
+        change_file_name = True
+        properties = propsys.SHGetPropertyStoreFromParsingName(f)
+        dt = properties.GetValue(pscon.PKEY_Media_DateEncoded).GetValue()
+        if dt is not None and 0 < (datetime.now() - dt).days < 5 * 365:
+            ctime = dt
+        else:
+            ctime = datetime.fromtimestamp(time.mktime(time.localtime(os.path.getmtime(f))))
+            dt: datetime = dateparser.parse(fn, date_formats=['%Y%m%d%H%M%S'])
+            if dt is not None and 0 < (datetime.now() - dt).days < 5 * 365 and dt < ctime:
+                ctime = dt
+                change_file_name = False
+        return datetime.strftime(ctime, PATH_FMT), datetime.strftime(ctime, PREFIX_FMT), change_file_name
     raise ValueError(f'Unsupported file {f}')
 
 
@@ -52,15 +70,17 @@ def process_file(f, root=None) -> List[Tuple[str, str]]:
     if os.path.isfile(f):
         basename = os.path.basename(f)
         try:
-            subpath, timestamp = get_timestamp(f)
+            subpath, timestamp, change_filename = get_timestamp(f)
             prefix = "%s_" % timestamp
             if basename[0:len(prefix)] == prefix:
                 nn = os.path.join(root, subpath, basename)
                 if f == nn:
                     return []
                 print("File %s was already renamed, just moving" % (f))
-            else:
+            elif change_filename:
                 nn = os.path.join(root, subpath, "%s%s" % (prefix, basename))
+            else:
+                nn = os.path.join(root, subpath, "%s" % (basename))
         except ValueError as ve:
             print("File %s not processed" % f)
             nn = os.path.join(root, 'skipped', basename)
