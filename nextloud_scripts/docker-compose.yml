@@ -1,0 +1,35 @@
+services:
+  db:
+    hostname: db
+    image: mariadb:10.6
+    container_name: mysql
+    restart: always
+    command: --transaction-isolation=READ-COMMITTED --log-bin=binlog --binlog-format=ROW
+    volumes:
+      - ../data/mysql:/var/lib/mysql
+    environment:
+      - MARIADB_AUTO_UPGRADE=1
+      - MARIADB_DISABLE_UPGRADE_BACKUP=1
+    env_file:
+      - db.env
+  
+
+  app:
+    image: mync
+    build: ./app
+    container_name: mync
+    restart: always
+    ports:
+      - 8080:80
+    volumes:
+      - ../data/nextcloud:/var/www/html
+    environment:
+      - MARIADB_AUTO_UPGRADE=1
+      - MARIADB_DISABLE_UPGRADE_BACKUP=1
+      - MYSQL_HOST=db
+    env_file:
+      - db.env
+    depends_on:
+      - db
+
+      
