@@ -29,7 +29,7 @@ def get_exif_creation_dates_video(path) -> datetime:
     process: subprocess.CompletedProcess = subprocess.run([exe, path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if not process.returncode == 0:
         raise RuntimeError('Error running exiftool')
-    lines = process.stdout.decode("utf-8").replace("\r", "").split("\n")
+    lines = process.stdout.decode("cp1251").replace("\r", "").split("\n")
     for l in lines:
         if EXIFTOOL_DATE_TAG_VIDEOS in l:
             arr = [int(s.strip()) for s in regex.split(":+|\s+", l[l.index(':') + 1:].strip())]
@@ -195,6 +195,7 @@ def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = Non
             prefix = "%s_" % timestamp
             ctime: datetime = datetime.fromtimestamp(time.mktime(time.localtime(os.path.getmtime(f))))
             ftime: datetime = dateparser.parse(timestamp, date_formats=['%Y%m%d%H%M%S'])
+            new_datetime = ctime
             if ftime is not None and (
                     ctime.year != ftime.year or ctime.month != ftime.month or ctime.hour != ftime.hour or ctime.min != ftime.min):
                 print(f'Need to update this {f} with new date: {ftime} before it was {ctime}')
@@ -208,7 +209,7 @@ def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = Non
             else:
                 nn = os.path.join(root, subpath, "%s" % (basename))
         except ValueError as ve:
-            print("File %s not processed" % f)
+            print(f"File {f} not processed: {ve}")
             nn = os.path.join(root, 'skipped', basename)
         return [Diff(f, nn, new_datetime)]
     else:
@@ -220,6 +221,10 @@ def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = Non
                 files.append(fi)
         if len(files) > 0:
             if exec is not None:
+                while len(futures) > 5:
+                    fut = futures[0]
+                    fut.result()
+                    futures.remove(fut)
                 print(f"Queueing {len(files)} files from {f}")
                 future = exec.submit(process_file_list, files, f, root, pickup_timestamps)
                 futures.append(future)
