@@ -1,7 +1,10 @@
 #!/usr/bin/python3.6
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
+
 import PIL
 import pywintypes
-from win32com.propsys import propsys, pscon
+import regex
 import datetime
 from datetime import datetime
 import filecmp
@@ -17,6 +20,23 @@ import dateparser
 
 PREFIX_FMT = '%Y%m%d%H%M%S'
 PATH_FMT = '%Y/%m'
+
+
+def get_exif_creation_dates_video(path) -> datetime:
+    # https://exiftool.org/index.html
+    EXIFTOOL_DATE_TAG_VIDEOS = "Create Date"
+    exe = os.path.join(os.getcwd(), 'utils/exiftool.exe')
+    process: subprocess.CompletedProcess = subprocess.run([exe, path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if not process.returncode == 0:
+        raise RuntimeError('Error running exiftool')
+    lines = process.stdout.decode("utf-8").replace("\r", "").split("\n")
+    for l in lines:
+        if EXIFTOOL_DATE_TAG_VIDEOS in l:
+            arr = [int(s.strip()) for s in regex.split(":+|\s+", l[l.index(':') + 1:].strip())]
+            if arr[0] == 0:
+                return None
+            return datetime(arr[0], arr[1], arr[2], arr[3], arr[4])
+    return None
 
 
 class Diff:
@@ -48,6 +68,11 @@ class Diff:
     def move_if_needed(self, dryRun=True) -> bool:
         if not self.need_move():
             return False
+        if os.path.isfile(self.dest_file_name) and not filecmp.cmp(self.dest_file_name,
+                                                                   self.dest_file_name) and os.path.getsize(
+            self.dest_file_name) > os.path.getsize(self.source_file_name):
+            raise ValueError(f'ABORT: Same names but diff files from {self.source_file_name} to {self.dest_file_name}')
+
         to_dir = os.path.dirname(self.dest_file_name)
         print(f'{"dryRun" if dryRun else ""}File {self.source_file_name} renamed to {self.dest_file_name}')
         if not dryRun:
@@ -58,6 +83,14 @@ class Diff:
 
 def is_vdeo(extension: str) -> bool:
     return extension.lower() in (".mp4", ".mp3", ".mov", ".mkv", ".3gp", ".avi", ".m4v")
+
+
+def get_timestampe_from_name(f: str) -> datetime:
+    try:
+        d = [int(c) for c in [f[0:4], f[4:6], f[6:8], f[8:10], f[10:12], f[12:14]]]
+        return datetime(d[0], d[1], d[2], d[3], d[4], d[5])
+    except:
+        return None
 
 
 def get_year_mo_from_path(path: Path) -> Tuple[int, int]:
@@ -94,23 +127,28 @@ def get_timestamp(f, pickup_timestamps=True, lastctime: datetime = None) -> Tupl
             fn = Path(file_name).name
             fn = "".join(filter(str.isdigit, fn))
             change_file_name = False
-            properties = propsys.SHGetPropertyStoreFromParsingName(f)
-            dt = properties.GetValue(pscon.PKEY_Media_DateEncoded).GetValue()
-            if dt is not None and 0 < (datetime.now() - dt.replace(tzinfo=None)).days < 5 * 365:
+            # properties = propsys.SHGetPropertyStoreFromParsingName(f)
+            # dt = properties.GetValue(pscon.PKEY_Media_DateEncoded).GetValue()
+            dt = get_exif_creation_dates_video(f)
+            if dt is not None:
                 ctime = dt
             elif pickup_timestamps:
-                year_mo = get_year_mo_from_path(Path(file_name))
-                ctime = datetime.fromtimestamp(time.mktime(time.localtime(os.path.getmtime(f))))
-                if year_mo[0] > 0 and ctime.year != year_mo[0] and year_mo[1] > 0 and ctime.month != year_mo[1]:
-                    ctime = ctime.replace(year=year_mo[0], month=year_mo[1])
-                    if lastctime is not None:
-                        ctime = lastctime
-                    print(f"Customized date for file {f} to: {ctime}")
+                dt = get_timestampe_from_name(fn)
+                if dt is not None:
+                    ctime = dt
                 else:
-                    dt: datetime = dateparser.parse(fn, date_formats=['%Y%m%d%H%M%S'])
-                    if dt is not None and 0 < (datetime.now() - dt).days < 5 * 365 and dt < ctime:
-                        ctime = dt
-                        change_file_name = False
+                    year_mo = get_year_mo_from_path(Path(file_name))
+                    ctime = datetime.fromtimestamp(time.mktime(time.localtime(os.path.getmtime(f))))
+                    if year_mo[0] > 0 and ctime.year != year_mo[0] and year_mo[1] > 0 and ctime.month != year_mo[1]:
+                        ctime = ctime.replace(year=year_mo[0], month=year_mo[1])
+                        if lastctime is not None:
+                            ctime = lastctime
+                        print(f"Customized date for file {f} to: {ctime}")
+                    else:
+                        dt: datetime = dateparser.parse(fn, date_formats=['%Y%m%d%H%M%S'])
+                        if dt is not None and 0 < (datetime.now() - dt).days < 5 * 365 and dt < ctime:
+                            ctime = dt
+                            change_file_name = False
             return datetime.strftime(ctime, PATH_FMT), datetime.strftime(ctime, PREFIX_FMT), change_file_name
         except pywintypes.com_error as com_err:
             raise ValueError(f'COM error with {file_name}: {com_err}', com_err)
@@ -121,21 +159,27 @@ def get_timestamp(f, pickup_timestamps=True, lastctime: datetime = None) -> Tupl
 
 def move_file(lst: List[Diff], dryRun=True, do_move=True):
     for diff in lst:
-        from_file = diff.source_file_name
-        to_file = diff.dest_file_name
-        if os.path.isfile(to_file) and not filecmp.cmp(from_file, to_file) and os.path.getsize(
-                to_file) > os.path.getsize(from_file):
-            raise ValueError(f'ABORT: Same names but diff files from {from_file} to {to_file}')
-
-    for diff in lst:
         if do_move:
+
             diff.move_if_needed(dryRun)
         else:
             diff.dest_file_name = diff.source_file_name
         diff.ctime_update_if_different(dryRun)
 
 
-def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = None) -> List[Diff]:
+def process_file_list(sortedfiles, f, root, pickup_timestamps=True):
+    lst: List[Diff] = []
+    for _f in sortedfiles:
+        increment: List[Diff] = process_file(os.path.join(f, _f), root, pickup_timestamps,
+                                             lst[-1].new_date_time_attribute if len(lst) > 0 else None)
+        move_file(increment, False, do_move=False)
+        lst.extend(increment)
+
+
+futures = []
+
+
+def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = None, exec=None) -> List[Diff]:
     if root is None:
         root = f
     if os.path.isfile(f):
@@ -151,7 +195,8 @@ def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = Non
             prefix = "%s_" % timestamp
             ctime: datetime = datetime.fromtimestamp(time.mktime(time.localtime(os.path.getmtime(f))))
             ftime: datetime = dateparser.parse(timestamp, date_formats=['%Y%m%d%H%M%S'])
-            if ctime.year != ftime.year and ctime.month != ftime.month:
+            if ftime is not None and (
+                    ctime.year != ftime.year or ctime.month != ftime.month or ctime.hour != ftime.hour or ctime.min != ftime.min):
                 print(f'Need to update this {f} with new date: {ftime} before it was {ctime}')
                 new_datetime = ftime
             if basename[0:len(prefix)] == prefix:
@@ -167,19 +212,33 @@ def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = Non
             nn = os.path.join(root, 'skipped', basename)
         return [Diff(f, nn, new_datetime)]
     else:
-        lst: List[Diff] = []
         sortedfiles = sorted(os.listdir(f))
-        for _f in sortedfiles:
-            lst.extend(process_file(os.path.join(f, _f), root, pickup_timestamps,
-                                    lst[-1].new_date_time_attribute if len(lst) > 0 else None))
-        return lst
+        lst: List[Diff] = []
+        files = []
+        for fi in sortedfiles:
+            if os.path.isfile(f + "/" + fi):
+                files.append(fi)
+        if len(files) > 0:
+            if exec is not None:
+                print(f"Queueing {len(files)} files from {f}")
+                future = exec.submit(process_file_list, files, f, root, pickup_timestamps)
+                futures.append(future)
+            else:
+                process_file_list(files, f, root, pickup_timestamps)
+        for _f in (fi for fi in sortedfiles if os.path.isdir(f + "/" + fi)):
+            process_file(os.path.join(f, _f), root, pickup_timestamps,
+                         lst[-1].new_date_time_attribute if len(lst) > 0 else None, exec=exec)
+        return []
 
 
 def main(paths, root=None):
-    for f in paths:
-        lst: List[Diff] = []
-        lst.extend(process_file(f, root=root))
-        move_file(lst, False, do_move=False)
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        for f in paths:
+            lst: List[Diff] = []
+            lst.extend(process_file(f, root=root, exec=executor))
+            move_file(lst, False, do_move=False)
+        for future in futures:
+            future.result()
 
 
 if __name__ == '__main__':
