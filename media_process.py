@@ -1,4 +1,5 @@
 #!/usr/bin/python3.6
+import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor
 
@@ -88,6 +89,7 @@ def is_vdeo(extension: str) -> bool:
 
 def get_timestampe_from_name(f: str) -> datetime:
     try:
+        f = re.sub("[^0-9.]", '', f);
         d = [int(c) for c in [f[0:4], f[4:6], f[6:8], f[8:10], f[10:12], f[12:14]]]
         return datetime(d[0], d[1], d[2], d[3], d[4], d[5])
     except:
@@ -161,26 +163,26 @@ def get_timestamp(f, pickup_timestamps=True, lastctime: datetime = None) -> Tupl
 def move_file(lst: List[Diff], dryRun=True, do_move=True):
     for diff in lst:
         if do_move:
-
             diff.move_if_needed(dryRun)
         else:
             diff.dest_file_name = diff.source_file_name
         diff.ctime_update_if_different(dryRun)
 
 
-def process_file_list(sortedfiles, f, root, pickup_timestamps=True):
+def process_file_list(sortedfiles, f, root, pickup_timestamps=True, do_move=False):
     lst: List[Diff] = []
     for _f in sortedfiles:
         increment: List[Diff] = process_file(os.path.join(f, _f), root, pickup_timestamps,
                                              lst[-1].ctime if len(lst) > 0 else None)
-        move_file(increment, False, do_move=False)
+        move_file(increment, False, do_move=do_move)
         lst.extend(increment)
 
 
 futures = []
 
 
-def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = None, exec=None) -> List[Diff]:
+def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = None, exec=None, do_move=False) -> List[
+    Diff]:
     if root is None:
         root = f
     if os.path.isfile(f):
@@ -227,22 +229,22 @@ def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = Non
                     fut.result()
                     futures.remove(fut)
                 print(f"Queueing {len(files)} files from {f}")
-                future = exec.submit(process_file_list, files, f, root, pickup_timestamps)
+                future = exec.submit(process_file_list, files, f, root, pickup_timestamps, do_move)
                 futures.append(future)
             else:
-                process_file_list(files, f, root, pickup_timestamps)
+                process_file_list(files, f, root, pickup_timestamps, do_move=do_move)
         for _f in (fi for fi in sortedfiles if os.path.isdir(f + "/" + fi)):
             process_file(os.path.join(f, _f), root, pickup_timestamps,
-                         lst[-1].new_date_time_attribute if len(lst) > 0 else None, exec=exec)
+                         lst[-1].new_date_time_attribute if len(lst) > 0 else None, exec=exec, do_move=do_move)
         return []
 
 
-def main(paths, root=None):
+def main(paths, root=None, do_move=False):
     with ThreadPoolExecutor(max_workers=5) as executor:
         for f in paths:
             lst: List[Diff] = []
-            lst.extend(process_file(f, root=root, exec=executor))
-            move_file(lst, False, do_move=False)
+            lst.extend(process_file(f, root=root, exec=executor, do_move=do_move))
+            move_file(lst, False, do_move=do_move)
         for future in futures:
             print('Waiting task completion on the end')
             future.result()
