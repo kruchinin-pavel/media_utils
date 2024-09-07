@@ -42,8 +42,9 @@ def get_exif_creation_dates_video(path) -> datetime:
 class Diff:
 
     def __init__(self, source_file_name: str, dest_file_name: Optional[str],
-                 new_date_time_attribute: Optional[datetime]):
+                 new_date_time_attribute: Optional[datetime], ctime: Optional[datetime]):
         super().__init__()
+        self.ctime = ctime
         self.new_date_time_attribute = new_date_time_attribute
         self.dest_file_name = dest_file_name
         self.source_file_name = source_file_name
@@ -171,7 +172,7 @@ def process_file_list(sortedfiles, f, root, pickup_timestamps=True):
     lst: List[Diff] = []
     for _f in sortedfiles:
         increment: List[Diff] = process_file(os.path.join(f, _f), root, pickup_timestamps,
-                                             lst[-1].new_date_time_attribute if len(lst) > 0 else None)
+                                             lst[-1].ctime if len(lst) > 0 else None)
         move_file(increment, False, do_move=False)
         lst.extend(increment)
 
@@ -189,21 +190,21 @@ def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = Non
         if f'{os.path.relpath(f, root)}'.startswith('skipped'):
             return []
         basename = os.path.basename(f)
+        ctime = None
         try:
             new_datetime = None
             subpath, timestamp, change_filename = get_timestamp(f, lastctime=lastctime)
             prefix = "%s_" % timestamp
             ctime: datetime = datetime.fromtimestamp(time.mktime(time.localtime(os.path.getmtime(f))))
             ftime: datetime = dateparser.parse(timestamp, date_formats=['%Y%m%d%H%M%S'])
-            new_datetime = ctime
             if ftime is not None and (
                     ctime.year != ftime.year or ctime.month != ftime.month or ctime.hour != ftime.hour or ctime.min != ftime.min):
                 print(f'Need to update this {f} with new date: {ftime} before it was {ctime}')
                 new_datetime = ftime
             if basename[0:len(prefix)] == prefix:
                 nn = os.path.join(root, subpath, basename)
-                print("File %s was already renamed, just moving" % f)
-                return [Diff(f, nn, new_datetime)]
+                # print("File %s was already renamed, just moving" % f)
+                return [Diff(f, nn, new_datetime, ctime)]
             elif change_filename:
                 nn = os.path.join(root, subpath, "%s%s" % (prefix, basename))
             else:
@@ -211,7 +212,7 @@ def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = Non
         except ValueError as ve:
             print(f"File {f} not processed: {ve}")
             nn = os.path.join(root, 'skipped', basename)
-        return [Diff(f, nn, new_datetime)]
+        return [Diff(f, nn, new_date_time_attribute=new_datetime, ctime=ctime)]
     else:
         sortedfiles = sorted(os.listdir(f))
         lst: List[Diff] = []
@@ -243,6 +244,7 @@ def main(paths, root=None):
             lst.extend(process_file(f, root=root, exec=executor))
             move_file(lst, False, do_move=False)
         for future in futures:
+            print('Waiting task completion on the end')
             future.result()
 
 
