@@ -108,19 +108,24 @@ def get_year_mo_from_path(path: Path) -> Tuple[int, int]:
 def get_timestamp(f, pickup_timestamps=True, lastctime: datetime = None) -> Tuple[str, str, bool]:
     from PIL import Image, ExifTags
     file_name, extension = splitext(f)
-    if extension.lower() in (".jpg", ".jpeg"):
+    if extension.lower() in (".jpg", ".jpeg", ".png"):
         try:
             img = Image.open(f)
             exif_obj = img._getexif()
+            value = None
             if exif_obj is not None:
                 exif = {ExifTags.TAGS[k]: v for k, v in exif_obj.items() if k in ExifTags.TAGS}
                 value: str = exif.get('DateTimeOriginal', None)
                 if value is None:
                     value = exif.get('DateTime', None)
-                    if value is None:
-                        raise ValueError(f'in {f} neither DateTimeOriginal nor DateTime found. Has only: {exif.keys()}')
-                dt, tm = [v.split(':') for v in value.split(' ')]
-                return f'{dt[0]}{os.sep}{dt[1]}', f'{"".join(dt + tm)}', False
+            if value is None:
+                dt = get_timestampe_from_name(os.path.basename(f))
+                if dt is None:
+                    raise ValueError(f'in {f} neither DateTimeOriginal nor DateTime found. Has only: {exif.keys()}')
+                else:
+                    return datetime.strftime(dt, PATH_FMT), datetime.strftime(dt, PREFIX_FMT), False
+            dt, tm = [v.split(':') for v in value.split(' ')]
+            return f'{dt[0]}{os.sep}{dt[1]}', f'{"".join(dt + tm)}', False
         except PIL.UnidentifiedImageError as e:
             raise ValueError(f'Error opening {file_name}: {e}', e)
         except OSError as e:
