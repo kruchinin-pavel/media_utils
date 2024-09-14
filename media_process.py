@@ -115,9 +115,12 @@ def get_timestamp(f, pickup_timestamps=True, lastctime: datetime = None) -> Tupl
             value = None
             if exif_obj is not None:
                 exif = {ExifTags.TAGS[k]: v for k, v in exif_obj.items() if k in ExifTags.TAGS}
-                value: str = exif.get('DateTimeOriginal', None)
-                if value is None:
-                    value = exif.get('DateTime', None)
+                valueDt = exif.get('DateTime', None)
+                valueDto: str = exif.get('DateTimeOriginal', None)
+                if valueDt is not None and valueDto is not None:
+                    value = max(valueDt, valueDto)
+                else:
+                    value = valueDto if valueDt is None else valueDt
             if value is None:
                 dt = get_timestampe_from_name(os.path.basename(f))
                 if dt is None:
@@ -261,6 +264,11 @@ if __name__ == '__main__':
         #     if not os.path.isdir(dir_to_look):
         #         raise AttributeError(f'Not a directory: {dir_to_look}')
         print(f'Looking at {sys.argv[1:]}')
-        main(sys.argv[1:])
+        # main(sys.argv[1:])
+        main([
+            "//pi.local/black/videos/photo_bkp/2013/10/"
+        ],
+            root='//pi.local/black/videos/photo_bkp/',
+            do_move=False)
     else:
         print("Usage: %s <JPG files with Exif tags>" % (sys.argv[0]))
