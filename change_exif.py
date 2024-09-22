@@ -12,7 +12,7 @@ def main():
 
 
 def process_file(d, f):
-    if not f.endswith("jpg"):
+    if not f.lower().endswith("jpg"):
         return
     import piexif
     img = Image.open(d + '/' + f)

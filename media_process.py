@@ -1,7 +1,8 @@
 #!/usr/bin/python3.6
+import logging
 import re
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, Future
 
 import PIL
 import pywintypes
@@ -53,43 +54,47 @@ class Diff:
     def __str__(self) -> str:
         return f'{self.source_file_name},{self.dest_file_name},{None if self.new_date_time_attribute is None else self.new_date_time_attribute}'
 
-    def ctime_update_if_different(self, dryRun=True) -> bool:
-        if self.new_date_time_attribute is not None:
-            print(
-                f'{"dryRun" if dryRun else ""}Changing timestamp: {self.dest_file_name} to {self.new_date_time_attribute}')
-            if not dryRun:
-                os.utime(self.dest_file_name,
-                         times=((self.new_date_time_attribute - datetime(1970, 1, 1)).total_seconds(),
-                                (self.new_date_time_attribute - datetime(1970, 1, 1)).total_seconds()))
-            return True
-        return False
-
-    def need_move(self) -> bool:
+    def _need_move(self) -> bool:
         return Path(self.source_file_name) != Path(self.dest_file_name)
 
-    def move_if_needed(self, dryRun=True) -> bool:
-        if not self.need_move():
-            return False
-        if os.path.isfile(self.dest_file_name) and not filecmp.cmp(self.dest_file_name,
-                                                                   self.dest_file_name) and os.path.getsize(
-            self.dest_file_name) > os.path.getsize(self.source_file_name):
-            raise ValueError(f'ABORT: Same names but diff files from {self.source_file_name} to {self.dest_file_name}')
-
+    def apply(self, do_move=True) -> str:
+        cmd = ""
+        if do_move and self._need_move():
+            cmd += "move " + self.source_file_name + " " + self.dest_file_name
         to_dir = os.path.dirname(self.dest_file_name)
-        print(f'{"dryRun" if dryRun else ""}File {self.source_file_name} renamed to {self.dest_file_name}')
-        if not dryRun:
+
+        replaces = self.source_file_name  # .replace('/', '\\')
+        replaced = self.dest_file_name  # .replace('/', '\\')
+        if self.new_date_time_attribute is not None:
+            cmd += f"touch \"{replaces}\" -d \"{self.new_date_time_attribute.strftime('%Y-%m-%d %H:%M:%S')}\"\n".replace(
+                "\\", "/")
+        if do_move:
             if not os.path.isdir(to_dir):
-                os.makedirs(to_dir)
-            shutil.move(self.source_file_name, self.dest_file_name)
+                replace = to_dir  # .replace('/', '\\')
+                cmd += f"mkdir -p {replace}"
+            # os.makedirs(to_dir)
+            cmd += f"move -p \"{replaces}\" \"{replaced}\")\n"
+            # shutil.move(self.source_file_name, self.dest_file_name)
+        return cmd
+
+
+class BadDiff(Diff):
+    def __init__(self, source_file_name: str):
+        Diff.__init__(self, source_file_name, dest_file_name=None, new_date_time_attribute=None, ctime=None)
+
+    def apply(self, do_move=True) -> str:
+        replace = self.source_file_name.replace('/', '\\')
+        return f"rm \"{replace}\""
 
 
 def is_vdeo(extension: str) -> bool:
     return extension.lower() in (".mp4", ".mp3", ".mov", ".mkv", ".3gp", ".avi", ".m4v")
 
 
-def get_timestampe_from_name(f: str) -> datetime:
+def get_timestampe_from_name(f_: str) -> datetime:
     try:
-        f = re.sub("[^0-9.]", '', f);
+        f = Path(f_).name
+        f = "".join(filter(str.isdigit, f))
         d = [int(c) for c in [f[0:4], f[4:6], f[6:8], f[8:10], f[10:12], f[12:14]]]
         return datetime(d[0], d[1], d[2], d[3], d[4], d[5])
     except:
@@ -109,153 +114,143 @@ def get_timestamp(f, pickup_timestamps=True, lastctime: datetime = None) -> Tupl
     from PIL import Image, ExifTags
     file_name, extension = splitext(f)
     if extension.lower() in (".jpg", ".jpeg", ".png"):
-        try:
-            img = Image.open(f)
-            exif_obj = img._getexif()
-            value = None
-            if exif_obj is not None:
-                exif = {ExifTags.TAGS[k]: v for k, v in exif_obj.items() if k in ExifTags.TAGS}
-                valueDt = exif.get('DateTime', None)
-                valueDto: str = exif.get('DateTimeOriginal', None)
-                if valueDt is not None and valueDto is not None:
-                    value = max(valueDt, valueDto)
-                else:
-                    value = valueDto if valueDt is None else valueDt
-            if value is None:
-                dt = get_timestampe_from_name(os.path.basename(f))
-                if dt is None:
-                    raise ValueError(f'in {f} neither DateTimeOriginal nor DateTime found. Has only: {exif.keys()}')
-                else:
-                    return datetime.strftime(dt, PATH_FMT), datetime.strftime(dt, PREFIX_FMT), False
-            dt, tm = [v.split(':') for v in value.split(' ')]
-            return f'{dt[0]}{os.sep}{dt[1]}', f'{"".join(dt + tm)}', False
-        except PIL.UnidentifiedImageError as e:
-            raise ValueError(f'Error opening {file_name}: {e}', e)
-        except OSError as e:
-            raise ValueError(f'Error opening {file_name}: {e}', e)
+        img = Image.open(f)
+        exif_obj = img._getexif()
+        value = None
+        if exif_obj is not None:
+            exif = {ExifTags.TAGS[k]: v for k, v in exif_obj.items() if k in ExifTags.TAGS}
+            valueDt = exif.get('DateTime', None)
+            valueDto: str = exif.get('DateTimeOriginal', None)
+            if valueDto is not None:
+                value = valueDto
+            elif valueDt is not None:
+                value = valueDt
+        if value is None:
+            dt = get_timestampe_from_name(os.path.basename(f))
+            if dt is None:
+                raise ValueError(f'in {f} neither DateTimeOriginal nor DateTime found. Has only: {exif_obj}')
+            else:
+                return datetime.strftime(dt, PATH_FMT), datetime.strftime(dt, PREFIX_FMT), False
+        dt, tm = [v.split(':') for v in value.split(' ')]
+        dt = datetime(int(dt[0]), int(dt[1]), int(dt[2]), int(tm[0]), int(tm[1]), int(tm[2]))
     elif is_vdeo(extension):
-        try:
-            fn = Path(file_name).name
-            fn = "".join(filter(str.isdigit, fn))
-            change_file_name = False
-            # properties = propsys.SHGetPropertyStoreFromParsingName(f)
-            # dt = properties.GetValue(pscon.PKEY_Media_DateEncoded).GetValue()
-            dt = get_exif_creation_dates_video(f)
-            if dt is not None:
-                ctime = dt
-            elif pickup_timestamps:
-                dt = get_timestampe_from_name(fn)
-                if dt is not None:
-                    ctime = dt
-                else:
-                    year_mo = get_year_mo_from_path(Path(file_name))
-                    ctime = datetime.fromtimestamp(time.mktime(time.localtime(os.path.getmtime(f))))
-                    if year_mo[0] > 0 and ctime.year != year_mo[0] and year_mo[1] > 0 and ctime.month != year_mo[1]:
-                        ctime = ctime.replace(year=year_mo[0], month=year_mo[1])
-                        if lastctime is not None:
-                            ctime = lastctime
-                        print(f"Customized date for file {f} to: {ctime}")
-                    else:
-                        dt: datetime = dateparser.parse(fn, date_formats=['%Y%m%d%H%M%S'])
-                        if dt is not None and 0 < (datetime.now() - dt).days < 5 * 365 and dt < ctime:
-                            ctime = dt
-                            change_file_name = False
-            return datetime.strftime(ctime, PATH_FMT), datetime.strftime(ctime, PREFIX_FMT), change_file_name
-        except pywintypes.com_error as com_err:
-            raise ValueError(f'COM error with {file_name}: {com_err}', com_err)
-        except Exception as e:
-            raise e
-    raise ValueError(f'Unsupported file {f}')
-
-
-def move_file(lst: List[Diff], dryRun=True, do_move=True):
-    for diff in lst:
-        if do_move:
-            diff.move_if_needed(dryRun)
+        dt = get_exif_creation_dates_video(f)
+    else:
+        return "", "", False
+    if dt is not None:
+        ctime = dt
+    elif pickup_timestamps:
+        dt = get_timestampe_from_name(f)
+        if dt is not None:
+            ctime = dt
         else:
-            diff.dest_file_name = diff.source_file_name
-        diff.ctime_update_if_different(dryRun)
+            ctime = datetime.fromtimestamp(time.mktime(time.localtime(os.path.getmtime(f))))
+            year_mo = get_year_mo_from_path(Path(file_name))
+            if (year_mo[0] > 0 and ctime.year != year_mo[0]) or (year_mo[1] > 0 and ctime.month != year_mo[1]):
+                ctime = ctime.replace(year=year_mo[0], month=year_mo[1])
+            elif lastctime is not None:
+                ctime = datetime(int(lastctime[0:4]), int(lastctime[4:6]), int(lastctime[6:8]), int(lastctime[8:10]),
+                                 int(lastctime[10:12]), int(lastctime[12:14]))
+    return datetime.strftime(ctime, PATH_FMT), datetime.strftime(ctime, PREFIX_FMT), False
 
 
-def process_file_list(sortedfiles, f, root, pickup_timestamps=True, do_move=False):
+def process_file_list(sortedfiles, f, root, pickup_timestamps) -> List[Diff]:
     lst: List[Diff] = []
     for _f in sortedfiles:
+        # print(f"Processing {_f}")
         increment: List[Diff] = process_file(os.path.join(f, _f), root, pickup_timestamps,
                                              lst[-1].ctime if len(lst) > 0 else None)
-        move_file(increment, False, do_move=do_move)
         lst.extend(increment)
+    print(f"Done {len(lst)} files from {f}")
+    return lst
 
 
-futures = []
+futures: List[Future] = []
 
 
-def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = None, exec=None, do_move=False) -> List[
+def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = None, exec=None) -> List[
     Diff]:
     if root is None:
         root = f
-    if os.path.isfile(f):
-        if os.stat(f).st_size == 0:
-            print("File %s of zero size, ignoring" % f)
-            return []
-        if f'{os.path.relpath(f, root)}'.startswith('skipped'):
-            return []
-        basename = os.path.basename(f)
-        ctime = None
-        try:
-            new_datetime = None
-            subpath, timestamp, change_filename = get_timestamp(f, lastctime=lastctime)
-            prefix = "%s_" % timestamp
-            ctime: datetime = datetime.fromtimestamp(time.mktime(time.localtime(os.path.getmtime(f))))
-            ftime: datetime = dateparser.parse(timestamp, date_formats=['%Y%m%d%H%M%S'])
-            if ftime is not None and (
-                    ctime.year != ftime.year or ctime.month != ftime.month or ctime.hour != ftime.hour or ctime.min != ftime.min):
-                print(f'Need to update this {f} with new date: {ftime} before it was {ctime}')
-                new_datetime = ftime
-            if basename[0:len(prefix)] == prefix:
-                nn = os.path.join(root, subpath, basename)
-                # print("File %s was already renamed, just moving" % f)
-                return [Diff(f, nn, new_datetime, ctime)]
-            elif change_filename:
-                nn = os.path.join(root, subpath, "%s%s" % (prefix, basename))
-            else:
-                nn = os.path.join(root, subpath, "%s" % (basename))
-        except ValueError as ve:
-            print(f"File {f} not processed: {ve}")
-            nn = os.path.join(root, 'skipped', basename)
-        return [Diff(f, nn, new_date_time_attribute=new_datetime, ctime=ctime)]
-    else:
-        sortedfiles = sorted(os.listdir(f))
-        lst: List[Diff] = []
-        files = []
-        for fi in sortedfiles:
-            if os.path.isfile(f + "/" + fi):
-                files.append(fi)
-        if len(files) > 0:
-            if exec is not None:
-                while len(futures) > 5:
-                    fut = futures[0]
-                    fut.result()
-                    futures.remove(fut)
-                print(f"Queueing {len(files)} files from {f}")
-                future = exec.submit(process_file_list, files, f, root, pickup_timestamps, do_move)
-                futures.append(future)
-            else:
-                process_file_list(files, f, root, pickup_timestamps, do_move=do_move)
-        for _f in (fi for fi in sortedfiles if os.path.isdir(f + "/" + fi)):
-            process_file(os.path.join(f, _f), root, pickup_timestamps,
-                         lst[-1].new_date_time_attribute if len(lst) > 0 else None, exec=exec, do_move=do_move)
-        return []
+    try:
+        if os.path.isfile(f):
+            if os.stat(f).st_size == 0:
+                print(f"File %s of zero size, ignoring >>{f}")
+                return []
+            if f'{os.path.relpath(f, root)}'.startswith('skipped'):
+                return []
+            basename = os.path.basename(f)
+            ctime = None
+            try:
+                new_datetime = None
+                subpath, timestamp, change_filename = get_timestamp(f, lastctime=lastctime)
+                prefix = "%s_" % timestamp
+                ctime: datetime = datetime.fromtimestamp(time.mktime(time.localtime(os.path.getmtime(f))))
+                ftime: datetime = dateparser.parse(timestamp, date_formats=['%Y%m%d%H%M%S'])
+                if ftime is not None and (
+                        ctime.year != ftime.year or ctime.month != ftime.month or ctime.hour != ftime.hour or ctime.min != ftime.min):
+                    print(f'Need to update this {f} with new date: {ftime} before it was {ctime}')
+                    new_datetime = ftime
+                    ctime = new_datetime
+                if basename[0:len(prefix)] == prefix:
+                    nn = os.path.join(root, subpath, basename)
+                    return [Diff(f, nn, new_datetime, ctime)]
+                elif change_filename:
+                    nn = os.path.join(root, subpath, "%s%s" % (prefix, basename))
+                else:
+                    nn = os.path.join(root, subpath, "%s" % (basename))
+            except ValueError as ve:
+                # print(f"File {f} not processed: {ve}")
+                # nn = os.path.join(root, 'skipped', basename)
+                return [BadDiff(f)]
+            return [Diff(f, nn, new_date_time_attribute=new_datetime, ctime=timestamp)]
+        else:
+            sortedfiles = sorted(os.listdir(f))
+            lst: List[Diff] = []
+            files = []
+            for fi in sortedfiles:
+                if os.path.isfile(f + "/" + fi):
+                    files.append(fi)
+            if len(files) > 0:
+                if exec is not None:
+                    print(f"Queueing {len(files)} files from {f}")
+                    futures.append(exec.submit(process_file_list, files, f, root, pickup_timestamps))
+                else:
+                    lst.extend(process_file_list(files, f, root, pickup_timestamps))
+            for _f in (fi for fi in sortedfiles if os.path.isdir(f + "/" + fi)):
+                process_file(os.path.join(f, _f), root, pickup_timestamps,
+                             lst[-1].new_date_time_attribute if len(lst) > 0 else None, exec=exec)
+            return lst
+    except Exception as e:
+        logging.error(f"Exception with {f}: {e}", e)
+        raise e
+
 
 
 def main(paths, root=None, do_move=False):
+    with open("cmd.bat", "a") as out:
+        out.writelines(f":Starting new {datetime.now()}\n")
+
     with ThreadPoolExecutor(max_workers=5) as executor:
         for f in paths:
-            lst: List[Diff] = []
-            lst.extend(process_file(f, root=root, exec=executor, do_move=do_move))
-            move_file(lst, False, do_move=do_move)
-        for future in futures:
-            print('Waiting task completion on the end')
-            future.result()
+            lst = process_file(f, root=root, exec=executor)
+            with open("cmd.bat", "a") as out:
+                for diff in lst:
+                    out.writelines(diff.apply(do_move=do_move).split("\n"))
+        while len(futures) > 0:
+            for future in futures:
+                if future.running():
+                    continue
+                diffs = future.result()
+                print(f'One task printed: {len(diffs)} commands')
+                with open("cmd.bat", "a") as out:
+                    for diff in diffs:
+                        for str in diff.apply(do_move=do_move).split("\n"):
+                            if len(str) > 0:
+                                out.write(f'{str}\n')
+                futures.remove(future)
+                break
+            time.sleep(3)
 
 
 if __name__ == '__main__':
@@ -266,7 +261,7 @@ if __name__ == '__main__':
         print(f'Looking at {sys.argv[1:]}')
         # main(sys.argv[1:])
         main([
-            "//pi.local/black/videos/photo_bkp/2013/10/"
+            "//pi.local/black/videos/photo_bkp/"
         ],
             root='//pi.local/black/videos/photo_bkp/',
             do_move=False)
