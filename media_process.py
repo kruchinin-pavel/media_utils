@@ -1,17 +1,12 @@
 #!/usr/bin/python3.6
 import logging
-import re
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, Future
 
-import PIL
-import pywintypes
 import regex
 import datetime
 from datetime import datetime
-import filecmp
 import os
-import shutil
 import sys
 import time
 from os.path import splitext
@@ -87,10 +82,6 @@ class BadDiff(Diff):
         return f"rm \"{replace}\""
 
 
-def is_vdeo(extension: str) -> bool:
-    return extension.lower() in (".mp4", ".mp3", ".mov", ".mkv", ".3gp", ".avi", ".m4v")
-
-
 def get_timestampe_from_name(f_: str) -> datetime:
     try:
         f = Path(f_).name
@@ -111,29 +102,8 @@ def get_year_mo_from_path(path: Path) -> Tuple[int, int]:
 
 
 def get_timestamp(f, pickup_timestamps=True, lastctime: datetime = None) -> Tuple[str, str, bool]:
-    from PIL import Image, ExifTags
     file_name, extension = splitext(f)
-    if extension.lower() in (".jpg", ".jpeg", ".png"):
-        img = Image.open(f)
-        exif_obj = img._getexif()
-        value = None
-        if exif_obj is not None:
-            exif = {ExifTags.TAGS[k]: v for k, v in exif_obj.items() if k in ExifTags.TAGS}
-            valueDt = exif.get('DateTime', None)
-            valueDto: str = exif.get('DateTimeOriginal', None)
-            if valueDto is not None:
-                value = valueDto
-            elif valueDt is not None:
-                value = valueDt
-        if value is None:
-            dt = get_timestampe_from_name(os.path.basename(f))
-            if dt is None:
-                raise ValueError(f'in {f} neither DateTimeOriginal nor DateTime found. Has only: {exif_obj}')
-            else:
-                return datetime.strftime(dt, PATH_FMT), datetime.strftime(dt, PREFIX_FMT), False
-        dt, tm = [v.split(':') for v in value.split(' ')]
-        dt = datetime(int(dt[0]), int(dt[1]), int(dt[2]), int(tm[0]), int(tm[1]), int(tm[2]))
-    elif is_vdeo(extension):
+    if extension.lower() in (".jpg", ".jpeg", ".png", ".mp4", ".mp3", ".mov", ".mkv", ".3gp", ".avi", ".m4v"):
         dt = get_exif_creation_dates_video(f)
     else:
         return "", "", False
@@ -224,7 +194,6 @@ def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = Non
     except Exception as e:
         logging.error(f"Exception with {f}: {e}", e)
         raise e
-
 
 
 def main(paths, root=None, do_move=False):
