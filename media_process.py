@@ -54,10 +54,7 @@ class Diff:
 
     def apply(self, do_move=True) -> str:
         cmd = ""
-        if do_move and self._need_move():
-            cmd += "move " + self.source_file_name + " " + self.dest_file_name
         to_dir = os.path.dirname(self.dest_file_name)
-
         replaces = self.source_file_name  # .replace('/', '\\')
         replaced = self.dest_file_name  # .replace('/', '\\')
         if self.new_date_time_attribute is not None:
@@ -66,9 +63,9 @@ class Diff:
         if do_move:
             if not os.path.isdir(to_dir):
                 replace = to_dir  # .replace('/', '\\')
-                cmd += f"mkdir -p {replace}"
+                cmd += f'mkdir -p "{replace}"\n'
             # os.makedirs(to_dir)
-            cmd += f"move -p \"{replaces}\" \"{replaced}\")\n"
+            cmd += f'mv "{replaces}" "{replaced}"\n'
             # shutil.move(self.source_file_name, self.dest_file_name)
         return cmd
 
@@ -205,7 +202,9 @@ def main(paths, root=None, do_move=False):
             lst = process_file(f, root=root, exec=executor)
             with open("cmd.bat", "a") as out:
                 for diff in lst:
-                    out.writelines(diff.apply(do_move=do_move).split("\n"))
+                    for str in diff.apply(do_move=do_move).split("\n"):
+                        if len(str) > 0:
+                            out.write(f'{str}\n')
         while len(futures) > 0:
             for future in futures:
                 if future.running():
@@ -230,9 +229,9 @@ if __name__ == '__main__':
         print(f'Looking at {sys.argv[1:]}')
         # main(sys.argv[1:])
         main([
-            "//pi.local/black/videos/photo_bkp/"
+            "//pi.local/black/ivan/photo"
         ],
-            root='//pi.local/black/videos/photo_bkp/',
-            do_move=False)
+            root='//pi.local/black/ivan/photo',
+            do_move=True)
     else:
         print("Usage: %s <JPG files with Exif tags>" % (sys.argv[0]))
