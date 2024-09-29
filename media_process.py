@@ -23,10 +23,11 @@ def get_exif_creation_dates_video(path) -> datetime:
     # https://exiftool.org/index.html
     EXIFTOOL_DATE_TAG_VIDEOS = "Create Date"
     exe = os.path.join(os.getcwd(), 'utils/exiftool.exe') if os.name == 'nt' else 'exiftool'
+    cp = "cp1251" if os.name == 'nt' else 'utf-8'
     process: subprocess.CompletedProcess = subprocess.run([exe, path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if not process.returncode == 0:
         raise RuntimeError('Error running exiftool')
-    lines = process.stdout.decode("cp1251").replace("\r", "").split("\n")
+    lines = process.stdout.decode(cp).replace("\r", "").split("\n")
     for l in lines:
         if EXIFTOOL_DATE_TAG_VIDEOS in l:
             arr = [int(s.strip()) for s in regex.split(":+|\\s+", l[l.index(':') + 1:].strip())]
