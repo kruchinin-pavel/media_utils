@@ -92,7 +92,7 @@ def process_dir(r, files) -> [str, int, int]:
             sz_orig = os.stat(fname_org).st_size
             sz_dup = os.stat(fname_dup).st_size
             if sz_orig > 0 and sz_orig == sz_dup:
-                total_saved += sz_orig
+                total_saved  += sz_orig
                 print(f'{fname_dup}: {sz_orig / 1024 / 1024.}mb'.replace('/', '\\'))
                 os.remove(fname_dup)
             else:

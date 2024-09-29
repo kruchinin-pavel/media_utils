@@ -9,7 +9,7 @@ from datetime import datetime
 import os
 import sys
 import time
-from os.path import splitext
+from os.path import splitext, normpath
 from pathlib import Path
 from typing import Tuple, List, Optional
 
@@ -55,15 +55,15 @@ class Diff:
     def apply(self, do_move=True) -> str:
         cmd = ""
         to_dir = os.path.dirname(self.dest_file_name)
-        replaces = self.source_file_name  # .replace('/', '\\')
-        replaced = self.dest_file_name  # .replace('/', '\\')
+        replaces = normpath(self.source_file_name)
+        replaced = normpath(self.dest_file_name)
         if self.new_date_time_attribute is not None:
             cmd += f"touch \"{replaces}\" -d \"{self.new_date_time_attribute.strftime('%Y-%m-%d %H:%M:%S')}\"\n".replace(
                 "\\", "/")
-        if do_move:
+        if do_move and self._need_move():
             if not os.path.isdir(to_dir):
-                replace = to_dir  # .replace('/', '\\')
-                cmd += f'mkdir -p "{replace}"\n'
+                replace = normpath(to_dir)
+                cmd += f'mkdir "{replace}"\n'
             # os.makedirs(to_dir)
             cmd += f'mv "{replaces}" "{replaced}"\n'
             # shutil.move(self.source_file_name, self.dest_file_name)
@@ -101,9 +101,12 @@ def get_year_mo_from_path(path: Path) -> Tuple[int, int]:
 def get_timestamp(f, pickup_timestamps=True, lastctime: datetime = None) -> Tuple[str, str, bool]:
     file_name, extension = splitext(f)
     if extension.lower() in (".jpg", ".jpeg", ".png", ".mp4", ".mp3", ".mov", ".mkv", ".3gp", ".avi", ".m4v"):
-        dt = get_exif_creation_dates_video(f)
+        try:
+            dt = get_exif_creation_dates_video(f)
+        except Exception:
+            return "exception", "", False
     else:
-        return "", "", False
+        return "unprocessed", "", False
     if dt is not None:
         ctime = dt
     elif pickup_timestamps:
@@ -156,7 +159,7 @@ def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = Non
                 ftime: datetime = dateparser.parse(timestamp, date_formats=['%Y%m%d%H%M%S'])
                 if ftime is not None and (
                         ctime.year != ftime.year or ctime.month != ftime.month or ctime.hour != ftime.hour or ctime.min != ftime.min):
-                    print(f'Need to update this {f} with new date: {ftime} before it was {ctime}')
+                    # print(f'Need to update this {f} with new date: {ftime} before it was {ctime}')
                     new_datetime = ftime
                     ctime = new_datetime
                 if basename[0:len(prefix)] == prefix:
@@ -180,7 +183,7 @@ def process_file(f, root=None, pickup_timestamps=True, lastctime: datetime = Non
                     files.append(fi)
             if len(files) > 0:
                 if exec is not None:
-                    print(f"Queueing {len(files)} files from {f}")
+                    print(f"Queueing {len(files)} files from {f}. Tasks awaiting {len(futures)}")
                     futures.append(exec.submit(process_file_list, files, f, root, pickup_timestamps))
                 else:
                     lst.extend(process_file_list(files, f, root, pickup_timestamps))
@@ -210,7 +213,7 @@ def main(paths, root=None, do_move=False):
                 if future.running():
                     continue
                 diffs = future.result()
-                print(f'One task printed: {len(diffs)} commands')
+                print(f'One task printed: {len(diffs)} commands. Tasks awaiting: {len(futures)}')
                 with open("cmd.bat", "a") as out:
                     for diff in diffs:
                         for str in diff.apply(do_move=do_move).split("\n"):
@@ -227,11 +230,10 @@ if __name__ == '__main__':
         #     if not os.path.isdir(dir_to_look):
         #         raise AttributeError(f'Not a directory: {dir_to_look}')
         print(f'Looking at {sys.argv[1:]}')
-        # main(sys.argv[1:])
-        main([
-            "//pi.local/black/ivan/photo"
-        ],
-            root='//pi.local/black/ivan/photo',
+        main(sys.argv[1:],
+        # main(["//pi.local/black/photo_vania"],
+            # root='//pi.local/black/photo_vania',
             do_move=True)
     else:
         print("Usage: %s <JPG files with Exif tags>" % (sys.argv[0]))
+
