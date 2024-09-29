@@ -29,7 +29,7 @@ def get_exif_creation_dates_video(path) -> datetime:
     lines = process.stdout.decode("cp1251").replace("\r", "").split("\n")
     for l in lines:
         if EXIFTOOL_DATE_TAG_VIDEOS in l:
-            arr = [int(s.strip()) for s in regex.split(":+|\s+", l[l.index(':') + 1:].strip())]
+            arr = [int(s.strip()) for s in regex.split(":+|\\s+", l[l.index(':') + 1:].strip())]
             if arr[0] == 0:
                 return None
             return datetime(arr[0], arr[1], arr[2], arr[3], arr[4])
@@ -231,9 +231,8 @@ if __name__ == '__main__':
         #         raise AttributeError(f'Not a directory: {dir_to_look}')
         print(f'Looking at {sys.argv[1:]}')
         main(sys.argv[1:],
-        # main(["//pi.local/black/photo_vania"],
-            # root='//pi.local/black/photo_vania',
-            do_move=True)
+             # main(["//pi.local/black/photo_vania"],
+             # root='//pi.local/black/photo_vania',
+             do_move=True)
     else:
         print("Usage: %s <JPG files with Exif tags>" % (sys.argv[0]))
-
