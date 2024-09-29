@@ -22,7 +22,7 @@ PATH_FMT = '%Y/%m'
 def get_exif_creation_dates_video(path) -> datetime:
     # https://exiftool.org/index.html
     EXIFTOOL_DATE_TAG_VIDEOS = "Create Date"
-    exe = os.path.join(os.getcwd(), 'utils/exiftool.exe')
+    exe = os.path.join(os.getcwd(), 'utils/exiftool.exe') if os.name == 'nt' else 'exiftool'
     process: subprocess.CompletedProcess = subprocess.run([exe, path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if not process.returncode == 0:
         raise RuntimeError('Error running exiftool')
