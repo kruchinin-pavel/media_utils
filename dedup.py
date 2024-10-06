@@ -22,4 +22,4 @@ def dedup(dup_log: str):
 
 
 if __name__ == '__main__':
-    dedup('//pi.local/black/videos/dups.log')
+    dedup(sys.argv[0])
