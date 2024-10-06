@@ -85,7 +85,7 @@ def process_dir(r, files) -> [str, int, int]:
     total_saved: int = 0
     total_checked: int = len(files)
     # print(f'Scanning {r}')
-    for name in [_f for _f in files if "~" == _f[-1]]:
+    for name in files:
         fname_dup = os.path.join(r, name)
         fname_org = os.path.join(r, name[:-1])
         if os.path.isfile(fname_org):
@@ -94,12 +94,13 @@ def process_dir(r, files) -> [str, int, int]:
             if sz_orig > 0 and sz_orig == sz_dup:
                 total_saved  += sz_orig
                 print(f'{fname_dup}: {sz_orig / 1024 / 1024.}mb'.replace('/', '\\'))
-                os.remove(fname_dup)
+                # os.remove(fname_dup)
+                print(f'rm {fname_dup}')
             else:
                 print(f'Dup with dif size {fname_dup}: {sz_dup}!={sz_orig}'.replace('/', '\\'))
         else:
             print(f'recover {fname_dup} to {fname_org}'.replace('/', '\\'))
-            os.rename(fname_dup, fname_org)
+            # os.rename(fname_dup, fname_org)
     return r, total_saved, total_checked
 
 

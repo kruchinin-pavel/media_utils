@@ -1,7 +1,7 @@
 import regex
 from PIL import Image, ExifTags
 import os
-from media_process import get_timestampe_from_name
+from media_process import get_timestamp_from_name
 
 
 def main():
@@ -27,7 +27,7 @@ def process_file(d, f):
         dts = [0]
         exif_dict = {'0th': {}, 'Exif': {}}
     if dts[0] < 1982:
-        new_ts = get_timestampe_from_name(f)
+        new_ts = get_timestamp_from_name(f)
         if new_ts is None:
             print(f'Issue with file {f}')
         exif_dict['0th'][tags['DateTime']] = new_ts.strftime('%Y:%m:%d %H:%M').encode("utf-8")

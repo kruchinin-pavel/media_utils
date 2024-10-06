@@ -80,7 +80,7 @@ class BadDiff(Diff):
         return f"rm \"{replace}\""
 
 
-def get_timestampe_from_name(f_: str) -> datetime:
+def get_timestamp_from_name(f_: str) -> datetime:
     try:
         f = Path(f_).name
         f = "".join(filter(str.isdigit, f))
@@ -111,7 +111,7 @@ def get_timestamp(f, pickup_timestamps=True, lastctime: datetime = None) -> Tupl
     if dt is not None:
         ctime = dt
     elif pickup_timestamps:
-        dt = get_timestampe_from_name(f)
+        dt = get_timestamp_from_name(f)
         if dt is not None:
             ctime = dt
         else:
