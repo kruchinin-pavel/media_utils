@@ -12,9 +12,10 @@ def dedup(dup_log: str):
         last_line, last_hash = '', ''
         for line in lines:
             line_count = line_count + 1
-            hash, name = regex.split('\s+', line)[:2]
+            hash = regex.split('\s+', line)[0]
+            name = line[len(hash):].strip()
             if last_hash == hash:
-                print(f'rm {dir}/{name}')
+                print(f'mv "{dir}/{name}" dedup/')
             last_hash = hash
             last_line = line
     print(f'Done {line_count} lines')
