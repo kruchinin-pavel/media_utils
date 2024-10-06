@@ -1,4 +1,4 @@
-from os import pardir
+import sys
 from os.path import dirname
 
 from regex import regex
