@@ -12,7 +12,7 @@ def dedup(dup_log: str):
         last_line, last_hash = '', ''
         for line in lines:
             line_count = line_count + 1
-            hash = regex.split('\s+', line)[0]
+            hash = regex.split('\\s+', line)[0]
             name = line[len(hash):].strip()
             if last_hash == hash:
                 print(f'mv "{dir}/{name}" dedup/')
@@ -22,4 +22,4 @@ def dedup(dup_log: str):
 
 
 if __name__ == '__main__':
-    dedup(sys.argv[0])
+    dedup(sys.argv[1])
