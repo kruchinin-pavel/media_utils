@@ -15,11 +15,14 @@ def dedup(dup_log: str):
             hash = regex.split('\\s+', line)[0]
             name = line[len(hash):].strip()
             if last_hash == hash:
-                print(f'#dupes {name} == {last_name}')
-                print(f'mv "{dir}/{name}" dedup/')
+                # print(f'#dupes {name} == {last_name}')
+                if len(name) > len(last_name):
+                    print(f'mv "{dir}/{name}" dedup/')
+                    continue
+                print(f'mv "{dir}/{last_name}" dedup/')
             last_hash = hash
-            last_line = line
             last_name = name
+
     print(f'Done {line_count} lines')
 
 
