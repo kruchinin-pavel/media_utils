@@ -64,7 +64,7 @@ class Diff:
         if do_move and self._need_move():
             if not os.path.isdir(to_dir):
                 replace = normpath(to_dir)
-                cmd += f'mkdir "{replace}"\n'
+                cmd += f'mkdir -p "{replace}"\n'
             # os.makedirs(to_dir)
             cmd += f'mv "{replaces}" "{replaced}"\n'
             # shutil.move(self.source_file_name, self.dest_file_name)
