@@ -101,7 +101,7 @@ def get_year_mo_from_path(path: Path) -> Tuple[int, int]:
 
 def get_timestamp(f, pickup_timestamps=True, lastctime: datetime = None) -> Tuple[str, str, bool]:
     file_name, extension = splitext(f)
-    if extension.lower() in (".jpg", ".jpeg", ".png", ".mp4", ".mp3", ".mov", ".mkv", ".3gp", ".avi", ".m4v"):
+    if extension.lower() in (".jpg", ".jpeg", ".png", ".mp4", ".mp3", ".mov", ".mkv", ".3gp", ".avi", ".m4v", ".heic"):
         try:
             dt = get_exif_creation_dates_video(f)
         except Exception:
